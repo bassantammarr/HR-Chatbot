@@ -1,4 +1,2 @@
-streamlit
-groq
-openai
-streamlit-js-eval
+streamlit==1.52.2
+groq==1.0.0
