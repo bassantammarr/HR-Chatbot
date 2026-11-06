@@ -559,7 +559,7 @@ if not st.session_state.setup_complete:
 
     with st.container(border=True):
         section_title("👤", "About you")
-        st.text_input("Name *", key="w_name", max_chars=50, placeholder="e.g. Sara Ahmed")
+        st.text_input("Name *", key="w_name", max_chars=50, placeholder="e.g. Ahmed Ismail")
         st.text_area("Experience *", key="w_experience", max_chars=500, height=100,
                      placeholder="e.g. 2 years as a data analyst at a fintech startup, built dashboards...")
         col_a, col_b = st.columns([2, 1])
