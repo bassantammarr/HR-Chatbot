@@ -20,8 +20,9 @@ INTERVIEWER_NAME = "Jon"
 INTERVIEW_TYPES = {
     "Behavioral": "Focus on behavioral questions about past experiences, teamwork, conflict, "
                   "and motivation. Encourage answers in the STAR format.",
-    "Technical": "Focus on technical questions about the skills and knowledge the role requires, "
-                 "including problem-solving and practical scenarios.",
+    "Technical": "Focus on conceptual technical questions about the skills and knowledge the "
+                 "role requires, including problem-solving and practical scenarios, answered "
+                 "verbally without writing code.",
     "Mixed": "Mix behavioral and technical questions.",
 }
 SCORE_CATEGORIES = {
@@ -364,6 +365,10 @@ def interviewer_prompt(p):
         f"- When introducing yourself, use the name {INTERVIEWER_NAME}. Never use placeholders "
         "like [Interviewer Name] or [Company] - always use the real names given here.\n"
         f"- {INTERVIEW_TYPES[p['interview_type']]}\n"
+        "- Never ask coding questions: do not ask the candidate to write, read, debug, or "
+        "complete code, pseudocode, SQL, or algorithms. Technical questions must be "
+        "conceptual and answerable verbally (explain a concept, compare approaches, walk "
+        "through how you would design or troubleshoot something).\n"
         f"- Ask exactly {p['num_questions']} questions in total, one at a time.\n"
         f"- Match the difficulty to a {p['level']} level candidate.\n"
         "- Briefly acknowledge each answer before the next question. Do not give scores or "
