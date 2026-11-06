@@ -15,6 +15,8 @@ EVAL_MODEL = "openai/gpt-oss-120b"    # stronger model for grading
 
 POSITIONS = ["Software Engineer", "Data Scientist", "Product Manager", "Designer", "Other"]
 LEVELS = ["Intern", "Junior", "Mid", "Senior", "Lead"]
+INTERVIEWER_NAME = "Jon"
+
 INTERVIEW_TYPES = {
     "Behavioral": "Focus on behavioral questions about past experiences, teamwork, conflict, "
                   "and motivation. Encourage answers in the STAR format.",
@@ -354,11 +356,13 @@ def interviewer_prompt(p):
         background.append(f"Graduation year: {p['grad_year']}")
     jd = f"\n\nJob description:\n{p['job_description']}" if p["job_description"] else ""
     return (
-        f"You are an experienced interviewer at {p['company']}, conducting a "
+        f"You are {INTERVIEWER_NAME}, an experienced interviewer at {p['company']}, conducting a "
         f"{p['interview_type'].lower()} interview with {p['name']} for the {p['level']} "
         f"{p['position']} role.\n\n"
         "Candidate background:\n" + "\n".join(background) + jd + "\n\n"
         "Rules:\n"
+        f"- When introducing yourself, use the name {INTERVIEWER_NAME}. Never use placeholders "
+        "like [Interviewer Name] or [Company] - always use the real names given here.\n"
         f"- {INTERVIEW_TYPES[p['interview_type']]}\n"
         f"- Ask exactly {p['num_questions']} questions in total, one at a time.\n"
         f"- Match the difficulty to a {p['level']} level candidate.\n"
