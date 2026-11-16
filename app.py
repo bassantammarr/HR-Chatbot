@@ -1,11 +1,14 @@
 import html
+import io
 import json
 import time
 from datetime import datetime
 
+import docx
 import groq
 import streamlit as st
 from groq import Groq
+from pypdf import PdfReader
 
 st.set_page_config(page_title="HR Chatbot · Interview Coach", page_icon="🎯", layout="centered")
 
@@ -33,6 +36,7 @@ SCORE_CATEGORIES = {
 }
 MAX_ANSWER_CHARS = 1500
 MAX_JD_CHARS = 3000
+MAX_CV_CHARS = 12000
 AVATARS = {"assistant": "🧑‍💼", "user": "🙋"}
 
 KICKOFF_MESSAGE = {
@@ -300,7 +304,9 @@ defaults = {
     "feedback": None,
     "started_at": None,
     "ended_at": None,
-    "hint": None,          
+    "hint": None,
+    "cv_status": None,
+    "w_level": "Junior",   
 }
 for key, value in defaults.items():
     if key not in st.session_state:
@@ -324,6 +330,98 @@ def complete_setup():
     }
     ss.setup_complete = True
     ss.started_at = time.time()
+
+
+# ---------- CV autofill ----------
+CV_PROMPT = (
+    "You extract candidate details from a CV/resume. Respond with JSON only, in exactly this "
+    "structure:\n"
+    "{\n"
+    '  "name": "<full name, or empty string>",\n'
+    '  "experience": "<2-4 sentence summary of work experience and notable projects, '
+    'under 450 characters>",\n'
+    '  "skills": "<comma-separated list of the most relevant skills, under 250 characters>",\n'
+    '  "grad_year": <graduation year as an integer, or null>,\n'
+    f'  "position": "<one of: {", ".join(POSITIONS)}>",\n'
+    '  "custom_position": "<job title if position is Other, else empty string>",\n'
+    f'  "level": "<one of: {", ".join(LEVELS)}>"\n'
+    "}\n"
+    "Infer position and level from the most recent roles and years of experience. "
+    "Use only information in the CV; leave a field empty if it isn't there."
+)
+
+
+def cv_text(uploaded):
+    data = uploaded.getvalue()
+    name = uploaded.name.lower()
+    if name.endswith(".pdf"):
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages)
+    elif name.endswith(".docx"):
+        text = "\n".join(p.text for p in docx.Document(io.BytesIO(data)).paragraphs)
+    else:
+        text = data.decode("utf-8", errors="ignore")
+    return text.strip()[:MAX_CV_CHARS]
+
+
+def autofill_from_cv():
+    """Runs as the uploader's on_change callback, so it may set widget values."""
+    ss = st.session_state
+    ss.cv_status = None
+    uploaded = ss.w_cv
+    if uploaded is None:
+        return
+    try:
+        text = cv_text(uploaded)
+    except Exception:
+        ss.cv_status = ("error", "Couldn't read that file. Try a PDF, Word (.docx), or text file.")
+        return
+    if len(text) < 50:
+        ss.cv_status = ("error", "No readable text found in that file. If it's a scanned PDF, "
+                                 "try a text-based PDF or a Word file.")
+        return
+    try:
+        response = client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[{"role": "system", "content": CV_PROMPT}, {"role": "user", "content": text}],
+            response_format={"type": "json_object"},
+            reasoning_effort="low",
+        )
+        data = json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError:
+        ss.cv_status = ("error", "Couldn't understand the CV details. Please try again.")
+        return
+    except Exception as err:
+        ss.cv_status = ("error", friendly_error(err))
+        return
+
+    filled = []
+    for key, field, limit in [("name", "w_name", 50), ("experience", "w_experience", 500),
+                              ("skills", "w_skills", 300)]:
+        value = str(data.get(key) or "").strip()
+        if value:
+            ss[field] = value[:limit]
+            filled.append(key)
+    try:
+        year = int(data.get("grad_year"))
+        if 1970 <= year <= 2035:
+            ss.w_grad_year = year
+            filled.append("graduation year")
+    except (TypeError, ValueError):
+        pass
+    if data.get("position") in POSITIONS:
+        ss.w_position = data["position"]
+        if data["position"] == "Other":
+            ss.w_custom_position = str(data.get("custom_position") or "").strip()[:60]
+        filled.append("position")
+    if data.get("level") in LEVELS:
+        ss.w_level = data["level"]
+        filled.append("level")
+
+    if filled:
+        ss.cv_status = ("success", f"Filled in from your CV: {', '.join(filled)}. "
+                                   "Review and edit anything below.")
+    else:
+        ss.cv_status = ("warning", "Couldn't find profile details in that file.")
 
 
 def show_feedback():
@@ -563,6 +661,16 @@ if not st.session_state.setup_complete:
     stepper(0)
 
     with st.container(border=True):
+        section_title("📄", "Autofill from your CV")
+        st.file_uploader("Upload your CV (optional)", type=["pdf", "docx", "txt"], key="w_cv",
+                         on_change=autofill_from_cv,
+                         help="We'll read your CV and fill in your name, experience, skills, "
+                              "graduation year, position and level. You can edit everything after.")
+        if st.session_state.cv_status:
+            kind, msg = st.session_state.cv_status
+            getattr(st, kind)(msg)
+
+    with st.container(border=True):
         section_title("👤", "About you")
         st.text_input("Name *", key="w_name", max_chars=50, placeholder="e.g. Ahmed Ismail")
         st.text_area("Experience *", key="w_experience", max_chars=500, height=100,
@@ -581,7 +689,7 @@ if not st.session_state.setup_complete:
         with col1:
             st.selectbox("Position *", POSITIONS, key="w_position")
         with col2:
-            st.selectbox("Level *", LEVELS, key="w_level", index=1)
+            st.selectbox("Level *", LEVELS, key="w_level")
         if st.session_state.w_position == "Other":
             st.text_input("Position title *", key="w_custom_position", max_chars=60,
                           placeholder="e.g. DevOps Engineer")
