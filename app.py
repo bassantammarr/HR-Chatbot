@@ -1,6 +1,7 @@
 import html
 import io
 import json
+import random
 import time
 from datetime import datetime
 
@@ -20,6 +21,11 @@ POSITIONS = ["Software Engineer", "Data Scientist", "Product Manager", "Designer
 LEVELS = ["Intern", "Junior", "Mid", "Senior", "Lead"]
 INTERVIEWER_NAME = "Jon"
 MINUTES_PER_QUESTION = 2
+SETUP_TITLES = [
+    "Your rehearsal room is ready",
+    "Practice today, nail it tomorrow",
+    "Your next offer starts here",
+]
 
 INTERVIEW_TYPES = {
     "Behavioral": "Focus on behavioral questions about past experiences, teamwork, conflict, "
@@ -712,7 +718,9 @@ def session_card(p):
 # ---------- Setup ----------
 # =====================================================================
 if not st.session_state.setup_complete:
-    page_header("New interview", "New mock interview",
+    if "setup_title" not in st.session_state:  
+        st.session_state.setup_title = random.choice(SETUP_TITLES)
+    page_header("New interview", st.session_state.setup_title,
                 "Configure your session. Questions are generated from your profile and target role.")
     rail_col, main_col = st.columns([1, 3.1], gap="medium")
     with rail_col:
