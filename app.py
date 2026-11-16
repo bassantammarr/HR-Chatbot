@@ -10,7 +10,7 @@ import streamlit as st
 from groq import Groq
 from pypdf import PdfReader
 
-st.set_page_config(page_title="HR Chatbot · Interview Coach", page_icon="🎯", layout="centered")
+st.set_page_config(page_title="Interview Coach", page_icon="🎯", layout="wide")
 
 # ---------- Config ----------
 CHAT_MODEL = "openai/gpt-oss-20b"     # fast model for the live interview and hints
@@ -19,6 +19,7 @@ EVAL_MODEL = "openai/gpt-oss-120b"    # stronger model for grading
 POSITIONS = ["Software Engineer", "Data Scientist", "Product Manager", "Designer", "Other"]
 LEVELS = ["Intern", "Junior", "Mid", "Senior", "Lead"]
 INTERVIEWER_NAME = "Jon"
+MINUTES_PER_QUESTION = 2
 
 INTERVIEW_TYPES = {
     "Behavioral": "Focus on behavioral questions about past experiences, teamwork, conflict, "
@@ -28,6 +29,11 @@ INTERVIEW_TYPES = {
                  "verbally without writing code.",
     "Mixed": "Mix behavioral and technical questions.",
 }
+COMMON_SKILLS = [
+    "Python", "SQL", "Java", "JavaScript", "TypeScript", "React", "Node.js", "C++", "Git",
+    "Machine learning", "Data analysis", "Statistics", "Excel", "Power BI", "Tableau",
+    "AWS", "Docker", "Figma", "Communication", "Leadership", "Problem solving", "Teamwork",
+]
 SCORE_CATEGORIES = {
     "communication": ("Communication", "🗣️"),
     "technical_depth": ("Technical depth", "🧠"),
@@ -56,148 +62,183 @@ st.markdown(
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
+:root {
+    --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --soft: #F8FAFC;
+    --primary: #2563EB; --primary-soft: #EFF6FF; --primary-line: #BFDBFE;
+}
 html, body, [class*="css"], .stMarkdown, button, input, textarea {
     font-family: 'Inter', sans-serif !important;
 }
-.stApp {
-    background:
-        radial-gradient(900px 500px at 10% -10%, rgba(139, 92, 246, 0.18), transparent 60%),
-        radial-gradient(800px 500px at 110% 10%, rgba(34, 211, 238, 0.12), transparent 60%),
-        #0B0F1A;
-}
-.block-container { padding-top: 2.2rem; padding-bottom: 6rem; }
-header[data-testid="stHeader"] { background: transparent; }
+.stApp { background: #F6F8FB; }
+header[data-testid="stHeader"] { display: none; }
+.block-container { max-width: 1120px; padding: 5.2rem 1.5rem 4rem; }
 
-/* Hero */
-.hero { text-align: center; margin-bottom: 1.4rem; }
-.hero .badge {
-    display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 0.78rem;
-    font-weight: 600; letter-spacing: .04em; color: #C4B5FD;
-    background: rgba(139, 92, 246, 0.14); border: 1px solid rgba(139, 92, 246, 0.35);
+/* Top nav */
+.topnav {
+    position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 999990;
+    background: #fff; border-bottom: 1px solid var(--line);
 }
-.hero h1 {
-    font-size: 2.6rem; font-weight: 800; margin: .6rem 0 .3rem; line-height: 1.15;
-    background: linear-gradient(90deg, #A78BFA 0%, #60A5FA 50%, #22D3EE 100%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+.topnav .inner {
+    max-width: 1120px; margin: 0 auto; height: 100%; padding: 0 1.5rem;
+    display: flex; align-items: center; gap: 1.6rem;
 }
-.hero p { color: #9AA3B8; font-size: 1.02rem; margin: 0; }
+.brand { display: flex; align-items: center; gap: .55rem; font-weight: 700; color: var(--ink); }
+.brand .logo {
+    width: 26px; height: 26px; border-radius: 7px; background: var(--primary); color: #fff;
+    display: grid; place-items: center; font-size: .8rem;
+}
+.navlinks { display: flex; gap: .3rem; }
+.navlinks span { padding: 6px 10px; border-radius: 7px; font-size: .86rem; color: #475569; }
+.navlinks span.on { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.navlinks span.off { color: #94A3B8; cursor: default; }
 
-/* Stepper */
-.stepper { display: flex; justify-content: center; gap: .5rem; margin: 0 0 1.6rem; flex-wrap: wrap; }
-.step {
-    display: flex; align-items: center; gap: .45rem; padding: 6px 14px; border-radius: 999px;
-    font-size: .85rem; color: #6B7280; background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-}
-.step .dot {
-    width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
-    font-size: .72rem; font-weight: 700; background: rgba(255,255,255,0.06);
-}
-.step.active { color: #EDE9FE; border-color: rgba(139,92,246,.55); background: rgba(139,92,246,.16); }
-.step.active .dot { background: #8B5CF6; color: white; }
-.step.done { color: #A7F3D0; }
-.step.done .dot { background: rgba(52, 211, 153, .25); color: #34D399; }
+/* Page header */
+.crumbs { font-size: .78rem; color: var(--muted); margin-bottom: .55rem; }
+.page-title { font-size: 1.65rem; font-weight: 800; color: var(--ink); margin: 0 0 .25rem; }
+.page-sub { color: #475569; font-size: .92rem; margin-bottom: 1.4rem; }
 
-/* Cards and containers */
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: rgba(21, 27, 44, 0.65);
-    border: 1px solid rgba(255,255,255,0.07) !important;
-    border-radius: 16px !important;
-    backdrop-filter: blur(6px);
+/* Cards */
+[class*="st-key-card"] {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 1.4rem 1.5rem;
 }
-.section-title { display: flex; align-items: center; gap: .55rem; font-weight: 700;
-    font-size: 1.05rem; margin: .2rem 0 .6rem; color: #E6E8F0; }
-.section-title .icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
-    background: linear-gradient(135deg, rgba(139,92,246,.35), rgba(34,211,238,.25)); }
+.rail {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: .45rem;
+}
+.rstep { display: flex; gap: .7rem; padding: .65rem .7rem; border-radius: 9px; align-items: flex-start; }
+.rstep .n {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+    font-size: .72rem; font-weight: 700; border: 1px solid #CBD5E1; color: #475569; background: #fff;
+}
+.rstep b { display: block; font-size: .86rem; color: var(--ink); }
+.rstep small { font-size: .76rem; color: var(--muted); }
+.rstep.on { background: var(--primary-soft); }
+.rstep.on .n { background: var(--primary); border-color: var(--primary); color: #fff; }
+.rstep.done .n { background: #DCFCE7; border-color: #86EFAC; color: #15803D; }
+.tipcard {
+    margin: .45rem .25rem .25rem; padding: .75rem .8rem; border-radius: 9px;
+    background: var(--soft); border: 1px solid var(--line); font-size: .78rem; color: #475569;
+    line-height: 1.5;
+}
+.tipcard b { display: block; color: var(--ink); font-size: .82rem; margin-bottom: .25rem; }
+.tipcard .k { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+.tipcard .v { color: var(--ink); font-weight: 600; font-size: .84rem; margin-bottom: .4rem; }
+
+.section-h { font-size: 1rem; font-weight: 700; color: var(--ink); margin: 0 0 .2rem; }
+.split { border: 0; border-top: 1px solid var(--line); margin: .6rem -1.5rem 1rem; }
 
 /* Inputs */
+label p { font-size: .82rem !important; font-weight: 600 !important; color: #1E293B; }
 .stTextInput input, .stTextArea textarea, .stNumberInput input,
-div[data-baseweb="select"] > div {
-    border-radius: 10px !important;
+div[data-baseweb="select"] > div { border-radius: 8px !important; background: #fff !important; }
+.stMultiSelect [data-baseweb="tag"] {
+    background: var(--primary-soft) !important; border: 1px solid var(--primary-line);
+}
+.stMultiSelect [data-baseweb="tag"] span, .stMultiSelect [data-baseweb="tag"] svg {
+    color: #1D4ED8 !important; fill: #1D4ED8 !important;
+}
+[data-testid="stFileUploaderDropzone"] {
+    background: var(--soft); border: 1px dashed #CBD5E1; border-radius: 10px; padding: .7rem 1rem;
+}
+
+/* Level segmented control: full width, solid active state */
+[data-testid="stButtonGroup"], [data-testid="stButtonGroup"] > div { width: 100% !important; }
+[data-testid="stButtonGroup"] button { flex: 1; background: #fff; padding: .35rem .25rem; min-width: 0; }
+[data-testid="stButtonGroup"] button p { font-size: .82rem; }
+[data-testid="stButtonGroup"] button[kind="segmented_controlActive"] {
+    background: var(--primary) !important; border-color: var(--primary) !important;
+}
+[data-testid="stButtonGroup"] button[kind="segmented_controlActive"] p { color: #fff !important; }
+
+/* Question type: radio rows as cards */
+.st-key-qtype .stRadio, .st-key-qtype .stRadio > div { width: 100% !important; }
+.st-key-qtype div[role="radiogroup"] {
+    flex-direction: column; gap: .5rem; width: 100% !important; align-items: stretch !important;
+}
+.st-key-qtype div[role="radiogroup"] > label {
+    width: 100%; margin: 0; padding: .6rem .8rem; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff;
+}
+.st-key-qtype div[role="radiogroup"] > label:has(input:checked) {
+    border-color: var(--primary); background: var(--primary-soft);
+}
+
+.summary-box {
+    margin-top: .35rem; padding: .7rem .85rem; border-radius: 8px; font-size: .8rem; color: #475569;
+    background: var(--soft); border: 1px solid var(--line); line-height: 1.5;
+}
+.summary-box b { color: var(--ink); }
+
+/* Card footer band */
+.st-key-footer {
+    background: var(--soft); border-top: 1px solid var(--line);
+    margin: .6rem -1.5rem -1.4rem; padding: .85rem 1.5rem; border-radius: 0 0 12px 12px;
+    width: calc(100% + 3rem) !important; max-width: none !important;
 }
 
 /* Buttons */
-.stButton > button, .stDownloadButton > button {
-    border-radius: 10px; font-weight: 600; transition: transform .08s ease, box-shadow .2s ease;
-}
-.stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
-    background: linear-gradient(90deg, #8B5CF6, #6366F1); border: none;
-    box-shadow: 0 6px 20px rgba(139, 92, 246, .35);
-}
-.stButton > button[kind="primary"]:hover, .stDownloadButton > button[kind="primary"]:hover {
-    transform: translateY(-1px); box-shadow: 0 10px 26px rgba(139, 92, 246, .5);
-}
-.stButton > button:disabled { box-shadow: none !important; opacity: .45; }
+.stButton > button, .stDownloadButton > button { border-radius: 8px; font-weight: 600; }
+.stButton > button:disabled { opacity: .5; }
 
-/* Role chips */
-.chips { display: flex; gap: .45rem; flex-wrap: wrap; margin-bottom: .8rem; }
-.chip { padding: 4px 11px; border-radius: 999px; font-size: .8rem; font-weight: 500;
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); color: #CBD2E1; }
-.chip.accent { background: rgba(139,92,246,.16); border-color: rgba(139,92,246,.4); color: #DDD6FE; }
+/* Chips */
+.chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.chip { padding: 3px 10px; border-radius: 999px; font-size: .78rem; font-weight: 500;
+    background: var(--soft); border: 1px solid var(--line); color: #334155; }
+.chip.accent { background: var(--primary-soft); border-color: var(--primary-line); color: var(--primary); }
 
 /* Chat */
 div[data-testid="stChatMessage"] {
-    border-radius: 16px; padding: .8rem 1rem; margin-bottom: .55rem;
-    background: rgba(21, 27, 44, 0.75); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: .75rem .95rem; margin-bottom: .5rem;
+    background: #fff; border: 1px solid var(--line);
 }
 div[data-testid="stChatMessage"]:has([aria-label="Chat message from user"]),
 div[data-testid="stChatMessage"][aria-label="Chat message from user"] {
-    background: linear-gradient(135deg, rgba(139,92,246,.18), rgba(99,102,241,.12));
-    border-color: rgba(139,92,246,.3);
-}
-div[data-testid="stChatInput"] { border-radius: 14px; }
-
-/* Progress bars */
-div[data-testid="stProgress"] > div > div > div > div {
-    background: linear-gradient(90deg, #8B5CF6, #22D3EE) !important;
+    background: var(--primary-soft); border-color: var(--primary-line);
 }
 
 /* Score ring */
 .score-wrap { display: flex; align-items: center; gap: 1.6rem; flex-wrap: wrap; }
 .ring {
-    --size: 150px; width: var(--size); height: var(--size); border-radius: 50%; flex-shrink: 0;
+    --size: 140px; width: var(--size); height: var(--size); border-radius: 50%; flex-shrink: 0;
     display: grid; place-items: center;
-    background: conic-gradient(var(--c) calc(var(--p) * 1%), rgba(255,255,255,0.07) 0);
+    background: conic-gradient(var(--c) calc(var(--p) * 1%), #E2E8F0 0);
 }
 .ring .inner {
-    width: calc(var(--size) - 22px); height: calc(var(--size) - 22px); border-radius: 50%;
-    background: #111727; display: grid; place-items: center; text-align: center;
+    width: calc(var(--size) - 20px); height: calc(var(--size) - 20px); border-radius: 50%;
+    background: #fff; display: grid; place-items: center; text-align: center;
 }
-.ring .num { font-size: 2.4rem; font-weight: 800; line-height: 1; color: #F3F4F6; }
-.ring .den { font-size: .85rem; color: #8B93A7; }
-.verdict { font-size: 1.35rem; font-weight: 700; margin-bottom: .3rem; }
-.summary { color: #B6BED0; line-height: 1.55; }
+.ring .num { font-size: 2.3rem; font-weight: 800; line-height: 1; color: var(--ink); }
+.ring .den { font-size: .8rem; color: var(--muted); }
+.verdict { font-size: 1.25rem; font-weight: 700; margin-bottom: .3rem; }
+.summary { color: #475569; line-height: 1.55; }
 
 /* Category bars */
 .cat { margin-bottom: .85rem; }
-.cat .top { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: .3rem; }
+.cat .top { display: flex; justify-content: space-between; font-size: .88rem; margin-bottom: .3rem; }
 .cat .top .val { font-weight: 700; }
-.bar { height: 9px; border-radius: 999px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.bar { height: 8px; border-radius: 999px; background: #E2E8F0; overflow: hidden; }
 .bar > span { display: block; height: 100%; border-radius: 999px; }
 
 /* Stat tiles */
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: .4rem 0 1rem; }
-.stat { padding: .8rem; border-radius: 14px; text-align: center;
-    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.07); }
-.stat .v { font-size: 1.35rem; font-weight: 700; color: #F3F4F6; }
-.stat .l { font-size: .78rem; color: #8B93A7; margin-top: .15rem; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: .8rem 0; }
+.stat { padding: .8rem; border-radius: 12px; text-align: center; background: #fff; border: 1px solid var(--line); }
+.stat .v { font-size: 1.3rem; font-weight: 700; color: var(--ink); }
+.stat .l { font-size: .76rem; color: var(--muted); margin-top: .15rem; }
 
 /* Lists */
 .pill-list { list-style: none; padding: 0; margin: 0; }
-.pill-list li { padding: .55rem .75rem; border-radius: 10px; margin-bottom: .45rem; font-size: .93rem;
-    line-height: 1.45; background: rgba(255,255,255,0.035); border-left: 3px solid var(--c); }
+.pill-list li { padding: .55rem .75rem; border-radius: 8px; margin-bottom: .45rem; font-size: .9rem;
+    line-height: 1.45; background: var(--soft); border-left: 3px solid var(--c); color: #334155; }
 
-/* Sidebar */
-section[data-testid="stSidebar"] { background: #0E1322; border-right: 1px solid rgba(255,255,255,0.06); }
-.side-card { padding: .85rem; border-radius: 12px; margin-bottom: .8rem;
-    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.07); font-size: .9rem; }
-.side-card .k { color: #8B93A7; font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; }
-.side-card .v { color: #E6E8F0; font-weight: 600; margin-bottom: .45rem; }
+.gap { height: .8rem; }
 
 @media (max-width: 640px) {
-    .hero h1 { font-size: 2rem; }
-    .stats { grid-template-columns: 1fr 1fr 1fr; gap: .4rem; }
-    .ring { --size: 120px; }
+    .block-container { padding: 4.6rem 1rem 3rem; }
+    .navlinks span.off { display: none; }
+    .stats { gap: .4rem; }
+    .ring { --size: 116px; }
+    .split { margin-left: -1rem; margin-right: -1rem; }
+    [class*="st-key-card"] { padding: 1.1rem 1rem; }
+    .st-key-footer { margin: .6rem -1rem -1.1rem; padding: .8rem 1rem; width: calc(100% + 2rem) !important; }
 }
 </style>
 """,
@@ -209,42 +250,67 @@ def esc(text):
     return html.escape(str(text))
 
 
-def hero():
-    st.markdown(
+def html_block(markup):
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def top_nav():
+    html_block(
         """
-<div class="hero">
-  <span class="badge">AI INTERVIEW COACH</span>
-  <h1>Ace your next interview</h1>
-  <p>Practice with a realistic AI interviewer, then get scored, actionable feedback.</p>
-</div>
-""",
-        unsafe_allow_html=True,
+<div class="topnav"><div class="inner">
+  <div class="brand"><span class="logo">☰</span>Interview Coach</div>
+  <div class="navlinks">
+    <span class="on">Practice</span>
+    <span class="off" title="Coming soon">History</span>
+    <span class="off" title="Coming soon">Resources</span>
+  </div>
+</div></div>
+"""
     )
 
 
-def stepper(active):
-    steps = ["Setup", "Interview", "Feedback"]
+def page_header(crumb, title, subtitle):
+    html_block(
+        f'<div class="crumbs">Practice / {esc(crumb)}</div>'
+        f'<div class="page-title">{esc(title)}</div>'
+        f'<div class="page-sub">{esc(subtitle)}</div>'
+    )
+
+
+RAIL_STEPS = [("Setup", "Profile and role"), ("Interview", "Answer questions"),
+              ("Feedback", "Scores and tips")]
+
+
+def step_rail(active, extra=""):
     parts = []
-    for i, name in enumerate(steps):
-        state = "active" if i == active else "done" if i < active else ""
+    for i, (name, sub) in enumerate(RAIL_STEPS):
+        state = "on" if i == active else "done" if i < active else ""
         mark = "✓" if i < active else str(i + 1)
-        parts.append(f'<div class="step {state}"><span class="dot">{mark}</span>{name}</div>')
-    st.markdown(f'<div class="stepper">{"".join(parts)}</div>', unsafe_allow_html=True)
+        parts.append(f'<div class="rstep {state}"><span class="n">{mark}</span>'
+                     f'<div><b>{name}</b><small>{sub}</small></div></div>')
+    html_block(f'<div class="rail">{"".join(parts)}{extra}</div>')
 
 
-def section_title(icon, text):
-    st.markdown(f'<div class="section-title"><span class="icon">{icon}</span>{esc(text)}</div>',
-                unsafe_allow_html=True)
+STAR_CARD = ('<div class="tipcard"><b>STAR method</b>Situation, Task, Action, Result. '
+             'Use it for every behavioral answer.</div>')
+
+
+def section_h(text):
+    html_block(f'<div class="section-h">{esc(text)}</div>')
+
+
+def split():
+    html_block('<hr class="split">')
 
 
 def score_color(score):
     if score >= 8:
-        return "#34D399"
+        return "#16A34A"
     if score >= 6:
-        return "#A78BFA"
+        return "#2563EB"
     if score >= 4:
-        return "#FBBF24"
-    return "#F87171"
+        return "#D97706"
+    return "#DC2626"
 
 
 def verdict(score):
@@ -263,6 +329,9 @@ def fmt_duration(seconds):
     return f"{minutes}m {secs:02d}s" if minutes else f"{secs}s"
 
 
+top_nav()
+
+
 # ---------- API client ----------
 def get_client():
     try:
@@ -270,7 +339,6 @@ def get_client():
     except Exception:
         api_key = None
     if not api_key:
-        hero()
         st.error(
             "No Groq API key found. Add `GROQ_API_KEY` to `.streamlit/secrets.toml` "
             "(or to your app's Secrets on Streamlit Cloud) and reload the page."
@@ -306,22 +374,29 @@ defaults = {
     "ended_at": None,
     "hint": None,
     "cv_status": None,
-    "w_level": "Junior",   
+    
+    "w_level": "Junior",
+    "w_skills": [],
+    "w_interview_type": "Mixed",
+    "w_num_questions": 5,
 }
 for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
 
+def position_title(ss):
+    return ss.w_custom_position.strip() if ss.w_position == "Other" else ss.w_position
+
+
 def complete_setup():
     ss = st.session_state
-    position = ss.w_custom_position.strip() if ss.w_position == "Other" else ss.w_position
     ss.profile = {
         "name": ss.w_name.strip(),
         "experience": ss.w_experience.strip(),
-        "skills": ss.w_skills.strip(),
+        "skills": ", ".join(ss.w_skills),
         "grad_year": ss.w_grad_year,
-        "position": position,
+        "position": position_title(ss),
         "level": ss.w_level,
         "company": ss.w_company.strip(),
         "interview_type": ss.w_interview_type or "Mixed",
@@ -340,12 +415,14 @@ CV_PROMPT = (
     '  "name": "<full name, or empty string>",\n'
     '  "experience": "<2-4 sentence summary of work experience and notable projects, '
     'under 450 characters>",\n'
-    '  "skills": "<comma-separated list of the most relevant skills, under 250 characters>",\n'
+    '  "skills": ["<skill>", ...],\n'
     '  "grad_year": <graduation year as an integer, or null>,\n'
     f'  "position": "<one of: {", ".join(POSITIONS)}>",\n'
     '  "custom_position": "<job title if position is Other, else empty string>",\n'
     f'  "level": "<one of: {", ".join(LEVELS)}>"\n'
     "}\n"
+    "List at most 12 of the most relevant skills that the CV explicitly mentions, each a "
+    "short name; don't add skills that aren't written in the CV. "
     "Infer position and level from the most recent roles and years of experience. "
     "Use only information in the CV; leave a field empty if it isn't there."
 )
@@ -395,12 +472,18 @@ def autofill_from_cv():
         return
 
     filled = []
-    for key, field, limit in [("name", "w_name", 50), ("experience", "w_experience", 500),
-                              ("skills", "w_skills", 300)]:
+    for key, field, limit in [("name", "w_name", 50), ("experience", "w_experience", 500)]:
         value = str(data.get(key) or "").strip()
         if value:
             ss[field] = value[:limit]
             filled.append(key)
+    skills = data.get("skills") or []
+    if isinstance(skills, str):
+        skills = skills.split(",")
+    skills = list(dict.fromkeys(str(s).strip()[:40] for s in skills if str(s).strip()))[:12]
+    if skills:
+        ss.w_skills = skills
+        filled.append("skills")
     try:
         year = int(data.get("grad_year"))
         if 1970 <= year <= 2035:
@@ -467,7 +550,9 @@ def interviewer_prompt(p):
         "complete code, pseudocode, SQL, or algorithms. Technical questions must be "
         "conceptual and answerable verbally (explain a concept, compare approaches, walk "
         "through how you would design or troubleshoot something).\n"
-        f"- Ask exactly {p['num_questions']} questions in total, one at a time.\n"
+        f"- Ask exactly {p['num_questions']} questions in total, one at a time. The session "
+        f"lasts about {p['num_questions'] * MINUTES_PER_QUESTION} minutes; if you mention its "
+        "length, use that.\n"
         f"- Match the difficulty to a {p['level']} level candidate.\n"
         "- Briefly acknowledge each answer before the next question. Do not give scores or "
         "detailed feedback during the interview.\n"
@@ -608,228 +693,238 @@ def build_report(p, fb):
     return "\n".join(lines)
 
 
-# ---------- Sidebar ----------
-def sidebar():
+def session_card(p):
     ss = st.session_state
-    with st.sidebar:
-        st.markdown("### 🎯 Interview Coach")
-        if ss.setup_complete:
-            p = ss.profile
-            elapsed = (ss.ended_at or time.time()) - ss.started_at
-            st.markdown(
-                f"""
-<div class="side-card">
-  <div class="k">Candidate</div><div class="v">{esc(p['name'])}</div>
-  <div class="k">Role</div><div class="v">{esc(p['level'])} {esc(p['position'])}</div>
-  <div class="k">Company</div><div class="v">{esc(p['company'])}</div>
-  <div class="k">Format</div><div class="v">{esc(p['interview_type'])} · {p['num_questions']} questions</div>
-  <div class="k">Time</div><div class="v" style="margin-bottom:0">⏱️ {fmt_duration(elapsed)}</div>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
-            if not ss.chat_complete and ss.answer_count >= 1:
-                st.button("⏹️ End & get feedback", on_click=end_early, width="stretch",
-                          help="Finish now and get feedback on the questions you've answered.")
-            st.button("🔄 Start over", on_click=restart, width="stretch")
-        else:
-            st.caption("Fill in your details to start a tailored mock interview.")
-
-        st.markdown("---")
-        with st.expander("⭐ The STAR method", expanded=not ss.setup_complete):
-            st.markdown(
-                "- **Situation** — set the scene briefly\n"
-                "- **Task** — what you were responsible for\n"
-                "- **Action** — what *you* did, step by step\n"
-                "- **Result** — the outcome, with numbers if possible"
-            )
-        with st.expander("💡 Interview tips"):
-            st.markdown(
-                "- Aim for 1–2 minute answers (≈100–250 words)\n"
-                "- Use concrete examples, not generalities\n"
-                "- Quantify impact: %, time saved, users, revenue\n"
-                "- It's fine to ask a clarifying question\n"
-                "- Stuck? Use the **Hint** button for guidance"
-            )
+    elapsed = (ss.ended_at or time.time()) - ss.started_at
+    return (
+        '<div class="tipcard">'
+        f'<div class="k">Candidate</div><div class="v">{esc(p["name"])}</div>'
+        f'<div class="k">Role</div><div class="v">{esc(p["level"])} {esc(p["position"])}</div>'
+        f'<div class="k">Company</div><div class="v">{esc(p["company"])}</div>'
+        f'<div class="k">Format</div><div class="v">{esc(p["interview_type"])} · '
+        f'{p["num_questions"]} questions</div>'
+        f'<div class="k">Time</div><div class="v" style="margin-bottom:0">⏱️ {fmt_duration(elapsed)}</div>'
+        '</div>'
+    )
 
 
-sidebar()
-hero()
-
-# ---------- Setup form ----------
+# =====================================================================
+# ---------- Setup ----------
+# =====================================================================
 if not st.session_state.setup_complete:
-    stepper(0)
+    page_header("New interview", "New mock interview",
+                "Configure your session. Questions are generated from your profile and target role.")
+    rail_col, main_col = st.columns([1, 3.1], gap="medium")
+    with rail_col:
+        step_rail(0, STAR_CARD)
 
-    with st.container(border=True):
-        section_title("📄", "Autofill from your CV")
-        st.file_uploader("Upload your CV (optional)", type=["pdf", "docx", "txt"], key="w_cv",
-                         on_change=autofill_from_cv,
-                         help="We'll read your CV and fill in your name, experience, skills, "
+    with main_col, st.container(key="card_setup"):
+        ss = st.session_state
+
+        # Your profile
+        section_h("Your profile")
+        st.file_uploader("Autofill from CV · :gray[Optional]", type=["pdf", "docx", "txt"],
+                         key="w_cv", on_change=autofill_from_cv,
+                         help="Upload your CV and we'll fill in your name, experience, skills, "
                               "graduation year, position and level. You can edit everything after.")
-        if st.session_state.cv_status:
-            kind, msg = st.session_state.cv_status
+        if ss.cv_status:
+            kind, msg = ss.cv_status
             getattr(st, kind)(msg)
 
-    with st.container(border=True):
-        section_title("👤", "About you")
-        st.text_input("Name *", key="w_name", max_chars=50, placeholder="e.g. Ahmed Ismail")
-        st.text_area("Experience *", key="w_experience", max_chars=500, height=100,
-                     placeholder="e.g. 2 years as a data analyst at a fintech startup, built dashboards...")
-        col_a, col_b = st.columns([2, 1])
-        with col_a:
-            st.text_input("Skills *", key="w_skills", max_chars=300,
-                          placeholder="e.g. Python, SQL, machine learning, communication")
-        with col_b:
-            st.number_input("Graduation year", key="w_grad_year", min_value=1970,
-                            max_value=2035, value=None, step=1, placeholder="Optional")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.text_input("Full name", key="w_name", max_chars=50, placeholder="Ahmed Ismail")
+        with c2:
+            st.number_input("Graduation year · :gray[Optional]", key="w_grad_year",
+                            min_value=1970, max_value=2035, value=None, step=1, placeholder="2024")
+        st.text_area("Experience", key="w_experience", max_chars=500, height=90,
+                     placeholder="2 years as a data analyst at a fintech startup; built KPI dashboards...")
+        st.multiselect("Skills", sorted(set(COMMON_SKILLS) | set(ss.w_skills), key=str.lower),
+                       key="w_skills", accept_new_options=True, max_selections=15,
+                       placeholder="Add skill...")
 
-    with st.container(border=True):
-        section_title("💼", "The role")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.selectbox("Position *", POSITIONS, key="w_position")
-        with col2:
-            st.selectbox("Level *", LEVELS, key="w_level")
-        if st.session_state.w_position == "Other":
-            st.text_input("Position title *", key="w_custom_position", max_chars=60,
-                          placeholder="e.g. DevOps Engineer")
-        else:
-            st.session_state.w_custom_position = ""
-        st.text_input("Company *", key="w_company", max_chars=100, placeholder="e.g. Google")
-        st.text_area("Job description (optional)", key="w_job_description", max_chars=MAX_JD_CHARS,
-                     height=100, placeholder="Paste the job posting so questions match the real role")
+        split()
 
-    with st.container(border=True):
-        section_title("⚙️", "Interview settings")
-        st.segmented_control("Interview type", list(INTERVIEW_TYPES), key="w_interview_type",
-                             default="Mixed", selection_mode="single")
-        st.slider("Number of questions", 3, 10, 5, key="w_num_questions")
+        # Target role
+        section_h("Target role")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.selectbox("Position", POSITIONS, key="w_position")
+            if ss.w_position == "Other":
+                st.text_input("Position title", key="w_custom_position", max_chars=60,
+                              placeholder="e.g. DevOps Engineer")
+            else:
+                ss.w_custom_position = ""
+        with c2:
+            st.segmented_control("Level", LEVELS, key="w_level", selection_mode="single",
+                                 width="stretch")
+            st.text_input("Company", key="w_company", max_chars=100, placeholder="e.g. Google")
 
-    ss = st.session_state
-    missing = [
-        label for label, value in [
-            ("name", ss.w_name), ("experience", ss.w_experience), ("skills", ss.w_skills),
-            ("company", ss.w_company),
-            ("position title", ss.w_custom_position if ss.w_position == "Other" else "x"),
-        ] if not value.strip()
-    ]
-    st.button("🚀 Start interview", on_click=complete_setup, type="primary",
-              disabled=bool(missing), width="stretch")
-    if missing:
-        st.caption("Fill in required fields: " + ", ".join(missing))
+        c1, c2 = st.columns(2)
+        with c1, st.container(key="qtype"):
+            st.radio("Question type", list(INTERVIEW_TYPES), key="w_interview_type", width="stretch",
+                     format_func=lambda t: f"{t}  :blue-badge[Recommended]" if t == "Mixed" else t)
+        with c2:
+            st.selectbox("Length", list(range(3, 11)), key="w_num_questions",
+                         format_func=lambda n: f"{n} questions · ~{n * MINUTES_PER_QUESTION} min")
+            n = ss.w_num_questions
+            role = position_title(ss) or "custom role"
+            html_block(
+                f'<div class="summary-box">Your session: <b>{esc(ss.w_level or "")} {esc(role)}</b>, '
+                f'{esc(ss.w_interview_type.lower())} questions, about '
+                f'{n * MINUTES_PER_QUESTION} minutes.</div>'
+            )
 
+        with st.expander("Job description · Optional"):
+            st.text_area("Job description", key="w_job_description", max_chars=MAX_JD_CHARS,
+                         height=110, label_visibility="collapsed",
+                         placeholder="Paste the job posting so questions match the real role")
+
+        missing = [
+            label for label, ok in [
+                ("full name", ss.w_name.strip()), ("experience", ss.w_experience.strip()),
+                ("skills", ss.w_skills), ("level", ss.w_level), ("company", ss.w_company.strip()),
+                ("position title", ss.w_position != "Other" or ss.w_custom_position.strip()),
+            ] if not ok
+        ]
+        with st.container(key="footer"):
+            f1, f2, f3 = st.columns([5, 1.2, 1.8], vertical_alignment="center")
+            with f1:
+                if missing:
+                    st.caption("Still needed: " + ", ".join(missing))
+            with f2:
+                st.button("Cancel", on_click=restart, width="stretch", help="Clear the form")
+            with f3:
+                st.button("Start interview", on_click=complete_setup, type="primary",
+                          disabled=bool(missing), width="stretch")
+
+# =====================================================================
 # ---------- Interview ----------
+# =====================================================================
 if st.session_state.setup_complete and not st.session_state.feedback_shown:
-    stepper(1)
     p = st.session_state.profile
     total = p["num_questions"]
-    st.markdown(
-        f"""
-<div class="chips">
-  <span class="chip accent">{esc(p['level'])} {esc(p['position'])}</span>
-  <span class="chip">🏢 {esc(p['company'])}</span>
-  <span class="chip">{esc(p['interview_type'])} interview</span>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-    answered = st.session_state.answer_count
-    st.progress(answered / total, text=f"Question {min(answered + 1, total)} of {total}"
-                if not st.session_state.chat_complete else f"All {total} questions answered")
+    page_header("Interview", f"{p['level']} {p['position']} interview",
+                f"Answer one question at a time. {INTERVIEWER_NAME} will ask {total} questions.")
+    rail_col, main_col = st.columns([1, 3.1], gap="medium")
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"], avatar=AVATARS[message["role"]]):
-            st.markdown(message["content"])
+    with rail_col:
+        step_rail(1, session_card(p) + STAR_CARD)
+        html_block('<div class="gap"></div>')
+        if not st.session_state.chat_complete and st.session_state.answer_count >= 1:
+            st.button("End & get feedback", on_click=end_early, width="stretch",
+                      help="Finish now and get feedback on the questions you've answered.")
+        st.button("Start over", on_click=restart, width="stretch")
 
-    # Interviewer opens the conversation
-    if not st.session_state.messages:
-        with st.chat_message("assistant", avatar=AVATARS["assistant"]):
-            try:
-                reply = stream_reply(api_messages())
-            except Exception as err:
-                st.error(friendly_error(err))
-                st.button("Try again")
-                st.stop()
-        st.session_state.messages.append({"role": "assistant", "content": reply})
+    with main_col, st.container(key="card_chat"):
+        html_block(
+            f'<div class="chips"><span class="chip accent">{esc(p["level"])} {esc(p["position"])}</span>'
+            f'<span class="chip">🏢 {esc(p["company"])}</span>'
+            f'<span class="chip">{esc(p["interview_type"])} interview</span></div>'
+        )
+        answered = st.session_state.answer_count
+        st.progress(answered / total, text=f"Question {min(answered + 1, total)} of {total}"
+                    if not st.session_state.chat_complete else f"All {total} questions answered")
 
-    if not st.session_state.chat_complete:
-      
-        hint = st.session_state.hint
-        if hint and hint[0] == st.session_state.answer_count:
-            st.info(hint[1], icon="💡")
-        elif st.button("💡 Need a hint?", help="Get coaching tips for this question without the answer."):
-            with st.spinner("Thinking of some tips..."):
-                try:
-                    st.session_state.hint = (st.session_state.answer_count, get_hint())
-                    st.rerun()
-                except Exception as err:
-                    st.error(friendly_error(err))
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"], avatar=AVATARS[message["role"]]):
+                st.markdown(message["content"])
 
-        if prompt := st.chat_input("Type your answer...", max_chars=MAX_ANSWER_CHARS):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user", avatar=AVATARS["user"]):
-                st.markdown(prompt)
-
-            is_final = st.session_state.answer_count + 1 >= total
+        # Interviewer opens the conversation
+        if not st.session_state.messages:
             with st.chat_message("assistant", avatar=AVATARS["assistant"]):
                 try:
-                    reply = stream_reply(api_messages(final_answer=is_final))
+                    reply = stream_reply(api_messages())
                 except Exception as err:
-                    st.session_state.messages.pop()  # let the user resend the answer
-                    st.error(friendly_error(err) + " Your answer wasn't sent, so please submit it again.")
+                    st.error(friendly_error(err))
+                    st.button("Try again")
                     st.stop()
-
             st.session_state.messages.append({"role": "assistant", "content": reply})
-            st.session_state.answer_count += 1
-            if is_final:
-                st.session_state.chat_complete = True
-                st.session_state.ended_at = time.time()
-            st.rerun()
 
-    if st.session_state.chat_complete:
-        st.success("Interview complete! Great job making it through. 🎉")
-        st.button("📊 Get my feedback", on_click=show_feedback, type="primary",
-                  width="stretch")
+        if not st.session_state.chat_complete:
+            hint = st.session_state.hint
+            if hint and hint[0] == st.session_state.answer_count:
+                st.info(hint[1], icon="💡")
+            elif st.button("💡 Need a hint?", help="Get coaching tips for this question without the answer."):
+                with st.spinner("Thinking of some tips..."):
+                    try:
+                        st.session_state.hint = (st.session_state.answer_count, get_hint())
+                        st.rerun()
+                    except Exception as err:
+                        st.error(friendly_error(err))
 
+            if prompt := st.chat_input("Type your answer...", max_chars=MAX_ANSWER_CHARS):
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                with st.chat_message("user", avatar=AVATARS["user"]):
+                    st.markdown(prompt)
+
+                is_final = st.session_state.answer_count + 1 >= total
+                with st.chat_message("assistant", avatar=AVATARS["assistant"]):
+                    try:
+                        reply = stream_reply(api_messages(final_answer=is_final))
+                    except Exception as err:
+                        st.session_state.messages.pop()  # let the user resend the answer
+                        st.error(friendly_error(err) + " Your answer wasn't sent, so please submit it again.")
+                        st.stop()
+
+                st.session_state.messages.append({"role": "assistant", "content": reply})
+                st.session_state.answer_count += 1
+                if is_final:
+                    st.session_state.chat_complete = True
+                    st.session_state.ended_at = time.time()
+                st.rerun()
+
+        if st.session_state.chat_complete:
+            st.success("Interview complete! Great job making it through. 🎉")
+            st.button("Get my feedback", on_click=show_feedback, type="primary", width="stretch")
+
+# =====================================================================
 # ---------- Feedback ----------
+# =====================================================================
 if st.session_state.feedback_shown:
-    stepper(2)
     p = st.session_state.profile
+    page_header("Feedback", "Your interview feedback",
+                f"{p['level']} {p['position']} at {p['company']} · {p['interview_type']} interview")
+    rail_col, main_col = st.columns([1, 3.1], gap="medium")
+    with rail_col:
+        step_rail(2, session_card(p))
+        html_block('<div class="gap"></div>')
+        st.button("New interview", on_click=restart, width="stretch")
 
-    if st.session_state.feedback is None:
-        with st.spinner("Evaluating your interview... this takes a few seconds."):
-            transcript = transcript_text()
-            if st.session_state.ended_early:
-                transcript += ("\n\n[The candidate ended the interview early. Ignore any final "
-                               "interviewer question that has no answer.]")
-            try:
-                response = client.chat.completions.create(
-                    model=EVAL_MODEL,
-                    messages=[
-                        {"role": "system", "content": evaluator_prompt(p)},
-                        {"role": "user", "content": transcript},
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.3,
-                )
-                st.session_state.feedback = parse_feedback(response.choices[0].message.content)
-            except (json.JSONDecodeError, AttributeError):
-                st.error("The evaluation came back in an unexpected format.")
-            except Exception as err:
-                st.error(friendly_error(err))
+    with main_col:
         if st.session_state.feedback is None:
-            st.button("Try again", on_click=retry_feedback, type="primary")
-            st.button("Restart interview", on_click=restart)
-            st.stop()
+            with st.spinner("Evaluating your interview... this takes a few seconds."):
+                transcript = transcript_text()
+                if st.session_state.ended_early:
+                    transcript += ("\n\n[The candidate ended the interview early. Ignore any final "
+                                   "interviewer question that has no answer.]")
+                try:
+                    response = client.chat.completions.create(
+                        model=EVAL_MODEL,
+                        messages=[
+                            {"role": "system", "content": evaluator_prompt(p)},
+                            {"role": "user", "content": transcript},
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.3,
+                    )
+                    st.session_state.feedback = parse_feedback(response.choices[0].message.content)
+                except (json.JSONDecodeError, AttributeError):
+                    st.error("The evaluation came back in an unexpected format.")
+                except Exception as err:
+                    st.error(friendly_error(err))
+            if st.session_state.feedback is None:
+                st.button("Try again", on_click=retry_feedback, type="primary")
+                st.stop()
 
-    fb = st.session_state.feedback
-    overall = fb["overall_score"]
-    color = score_color(overall)
+        fb = st.session_state.feedback
+        overall = fb["overall_score"]
+        color = score_color(overall)
 
-    # Overall score
-    with st.container(border=True):
-        st.markdown(
-            f"""
+        # Overall score
+        with st.container(key="card_score"):
+            html_block(
+                f"""
 <div class="score-wrap">
   <div class="ring" style="--p:{overall * 10}; --c:{color};">
     <div class="inner"><div><div class="num">{overall}</div><div class="den">out of 10</div></div></div>
@@ -839,85 +934,82 @@ if st.session_state.feedback_shown:
     <div class="summary">{esc(fb['summary'])}</div>
   </div>
 </div>
-""",
-            unsafe_allow_html=True,
-        )
+"""
+            )
 
-    # Stats
-    answered, avg_words, duration = answer_stats()
-    st.markdown(
-        f"""
+        # Stats
+        answered, avg_words, duration = answer_stats()
+        html_block(
+            f"""
 <div class="stats">
   <div class="stat"><div class="v">{answered}/{p['num_questions']}</div><div class="l">Questions answered</div></div>
   <div class="stat"><div class="v">{fmt_duration(duration)}</div><div class="l">Total time</div></div>
   <div class="stat"><div class="v">{avg_words}</div><div class="l">Avg. words / answer</div></div>
 </div>
-""",
-        unsafe_allow_html=True,
-    )
+"""
+        )
 
-    # Category breakdown
-    with st.container(border=True):
-        section_title("📊", "Score breakdown")
-        bars = []
-        for key, (label, icon) in SCORE_CATEGORIES.items():
-            score = fb["scores"][key]
-            c = score_color(score)
-            bars.append(
-                f'<div class="cat"><div class="top"><span>{icon} {label}</span>'
-                f'<span class="val" style="color:{c}">{score}/10</span></div>'
-                f'<div class="bar"><span style="width:{score * 10}%; background:{c}"></span></div></div>'
+        # Category breakdown
+        with st.container(key="card_breakdown"):
+            section_h("Score breakdown")
+            bars = []
+            for key, (label, icon) in SCORE_CATEGORIES.items():
+                score = fb["scores"][key]
+                c = score_color(score)
+                bars.append(
+                    f'<div class="cat"><div class="top"><span>{icon} {label}</span>'
+                    f'<span class="val" style="color:{c}">{score}/10</span></div>'
+                    f'<div class="bar"><span style="width:{score * 10}%; background:{c}"></span></div></div>'
+                )
+            html_block("".join(bars))
+        html_block('<div class="gap"></div>')
+
+        # Strengths / improvements
+        def pill_list(items, c):
+            items = items or ["None identified."]
+            lis = "".join(f"<li>{esc(s)}</li>" for s in items)
+            return f'<ul class="pill-list" style="--c:{c}">{lis}</ul>'
+
+        col_s, col_i = st.columns(2)
+        with col_s, st.container(key="card_strengths"):
+            section_h("✅ Strengths")
+            html_block(pill_list(fb["strengths"], "#16A34A"))
+        with col_i, st.container(key="card_improve"):
+            section_h("📈 Areas to improve")
+            html_block(pill_list(fb["improvements"], "#D97706"))
+        html_block('<div class="gap"></div>')
+
+        if fb["questions"]:
+            with st.container(key="card_questions"):
+                section_h("Question-by-question")
+                for i, q in enumerate(fb["questions"], 1):
+                    with st.expander(f"**Q{i}.** {q.get('question', 'Question')}"):
+                        st.markdown(f"**📝 Feedback**\n\n{q.get('feedback', '')}")
+                        st.success(f"**✨ Stronger answer**\n\n{q.get('better_answer', '')}")
+            html_block('<div class="gap"></div>')
+
+        with st.expander("💬 Full transcript"):
+            for m in st.session_state.messages:
+                with st.chat_message(m["role"], avatar=AVATARS[m["role"]]):
+                    st.markdown(m["content"])
+
+        safe_name = "".join(c for c in p["name"] if c.isalnum() or c in " -_").strip().replace(" ", "_") or "candidate"
+        col_d, col_j = st.columns(2)
+        with col_d:
+            st.download_button(
+                "⬇️ Report (.md)",
+                data=build_report(p, fb),
+                file_name=f"interview_report_{safe_name}.md",
+                mime="text/markdown",
+                type="primary",
+                width="stretch",
             )
-        st.markdown("".join(bars), unsafe_allow_html=True)
-
-    # Strengths / improvements
-    def pill_list(items, c):
-        items = items or ["None identified."]
-        lis = "".join(f"<li>{esc(s)}</li>" for s in items)
-        return f'<ul class="pill-list" style="--c:{c}">{lis}</ul>'
-
-    col_s, col_i = st.columns(2)
-    with col_s:
-        with st.container(border=True):
-            section_title("✅", "Strengths")
-            st.markdown(pill_list(fb["strengths"], "#34D399"), unsafe_allow_html=True)
-    with col_i:
-        with st.container(border=True):
-            section_title("📈", "Areas to improve")
-            st.markdown(pill_list(fb["improvements"], "#FBBF24"), unsafe_allow_html=True)
-
-    if fb["questions"]:
-        with st.container(border=True):
-            section_title("🔍", "Question-by-question")
-            for i, q in enumerate(fb["questions"], 1):
-                with st.expander(f"**Q{i}.** {q.get('question', 'Question')}"):
-                    st.markdown(f"**📝 Feedback**\n\n{q.get('feedback', '')}")
-                    st.success(f"**✨ Stronger answer**\n\n{q.get('better_answer', '')}")
-
-    with st.expander("💬 Full transcript"):
-        for m in st.session_state.messages:
-            with st.chat_message(m["role"], avatar=AVATARS[m["role"]]):
-                st.markdown(m["content"])
-
-    safe_name = "".join(c for c in p["name"] if c.isalnum() or c in " -_").strip().replace(" ", "_") or "candidate"
-    col_d, col_j, col_r = st.columns(3)
-    with col_d:
-        st.download_button(
-            "⬇️ Report (.md)",
-            data=build_report(p, fb),
-            file_name=f"interview_report_{safe_name}.md",
-            mime="text/markdown",
-            type="primary",
-            width="stretch",
-        )
-    with col_j:
-        st.download_button(
-            "⬇️ Data (.json)",
-            data=json.dumps({"profile": p, "feedback": fb, "transcript": st.session_state.messages},
-                            indent=2, default=str),
-            file_name=f"interview_{safe_name}.json",
-            mime="application/json",
-            width="stretch",
-        )
-    with col_r:
-        st.button("🔁 New interview", on_click=restart, width="stretch")
+        with col_j:
+            st.download_button(
+                "⬇️ Data (.json)",
+                data=json.dumps({"profile": p, "feedback": fb, "transcript": st.session_state.messages},
+                                indent=2, default=str),
+                file_name=f"interview_{safe_name}.json",
+                mime="application/json",
+                width="stretch",
+            )
